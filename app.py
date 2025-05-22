@@ -4,12 +4,15 @@ import re
 
 app = Flask(__name__)
 
-JINA_URL_OMIE = "https://r.jina.ai/https://www.omie.es/pt"
+# API Headers and URLs
 JINA_TOKEN = "jina_c8655362db9449fbbcc0dd09ab9b7203qsrLJERJviertMWrfJECzaHpWFGD"
 HEADERS = {"Authorization": f"Bearer {JINA_TOKEN}"}
+OMIE_URL = "https://r.jina.ai/https://www.omie.es/pt"
+MIBGAS_URL = "https://r.jina.ai/https://www.mibgas.es/pt"
 
+# Extract OMIE prices
 def fetch_omie_data():
-    response = requests.get(JINA_URL_OMIE, headers=HEADERS)
+    response = requests.get(OMIE_URL, headers=HEADERS)
     markdown = response.text
 
     result = {"spain": {}, "portugal": {}}
@@ -24,24 +27,55 @@ def fetch_omie_data():
 
     return result
 
+# Extract MIBGAS prices
+def fetch_mibgas_data():
+    response = requests.get(MIBGAS_URL, headers=HEADERS)
+    markdown = response.text
+
+    prices = []
+    pattern = r"#### Day Ahead (ES|PT).*?\n([0-9.,]+)€/MWh\s*\n\*\*([0-9.,]+)\*\* €/MWh\s*\n\*\*([0-9.,]+)\*\*%"
+    matches = re.findall(pattern, markdown, re.DOTALL)
+
+    for market, price, change, percent in matches:
+        prices.append({
+            "market": market,
+            "price": price,
+            "change": change,
+            "percent": percent
+        })
+
+    return prices
+
 @app.route("/")
 def index():
-    data = fetch_omie_data()
+    omie = fetch_omie_data()
+    mibgas = fetch_mibgas_data()
+
     return render_template_string("""
     <h2>📊 OMIE - Preços Médios</h2>
     <h3>Espanha</h3>
     <ul>
-        <li><strong>Médio:</strong> {{ spain.avg }} €/MWh</li>
-        <li><strong>Máximo:</strong> {{ spain.max }} €/MWh</li>
-        <li><strong>Mínimo:</strong> {{ spain.min }} €/MWh</li>
+        <li><strong>Médio:</strong> {{ omie.spain.avg }} €/MWh</li>
+        <li><strong>Máximo:</strong> {{ omie.spain.max }} €/MWh</li>
+        <li><strong>Mínimo:</strong> {{ omie.spain.min }} €/MWh</li>
     </ul>
     <h3>Portugal</h3>
     <ul>
-        <li><strong>Médio:</strong> {{ portugal.avg }} €/MWh</li>
-        <li><strong>Máximo:</strong> {{ portugal.max }} €/MWh</li>
-        <li><strong>Mínimo:</strong> {{ portugal.min }} €/MWh</li>
+        <li><strong>Médio:</strong> {{ omie.portugal.avg }} €/MWh</li>
+        <li><strong>Máximo:</strong> {{ omie.portugal.max }} €/MWh</li>
+        <li><strong>Mínimo:</strong> {{ omie.portugal.min }} €/MWh</li>
     </ul>
-    """, spain=data["spain"], portugal=data["portugal"])
+
+    <h2>🟢 MIBGAS - Day Ahead</h2>
+    {% for entry in mibgas %}
+    <h4>Mercado: {{ entry.market }}</h4>
+    <ul>
+        <li><strong>Preço:</strong> {{ entry.price }} €/MWh</li>
+        <li><strong>Variação:</strong> {{ entry.change }} €/MWh</li>
+        <li><strong>Percentual:</strong> {{ entry.percent }} %</li>
+    </ul>
+    {% endfor %}
+    """, omie=omie, mibgas=mibgas)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: omie-flask-app
+    name: omie-mibgas-app
     env: python
     plan: free
     buildCommand: ""
